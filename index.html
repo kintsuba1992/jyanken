@@ -55,12 +55,12 @@
   .chip{background:var(--panel2); border:1px solid #E3D8C6; border-radius:999px; padding:4px 12px;}
   .ok-mark{color:var(--gold); font-weight:700;}
   .hands{display:flex; gap:12px; margin-top:16px;}
-  .hand-btn{flex:1; aspect-ratio:1; background:#FFFDF8; border:2px solid #E3D8C6; border-radius:18px; font-size:2rem; color:var(--text); display:flex; align-items:center; justify-content:center;}
+  .hand-btn{flex:1; aspect-ratio:1; background:#FFFDF8; border:2px solid #E3D8C6; border-radius:18px; font-size:4rem; color:var(--text); display:flex; align-items:center; justify-content:center;}
   .hand-btn.selected{border-color:var(--accent); background:#FBEAE6; animation:pop .3s ease;}
   .hand-btn:disabled{opacity:.35;}
   @keyframes pop{0%{transform:scale(1);}50%{transform:scale(1.15);}100%{transform:scale(1);}}
   .my-hand{text-align:center; font-size:1.05rem; padding:20px 10px; background:var(--panel2); border-radius:14px; margin-top:14px;}
-  .my-hand .icon{font-size:2.4rem; display:block; margin-bottom:8px;}
+  .my-hand .icon{font-size:4.8rem; display:block; margin-bottom:8px;}
   .waiting{text-align:center; color:var(--purple); font-size:.9rem; letter-spacing:.08em; margin-top:12px;}
   .pulse{animation:pulse 1.4s ease-in-out infinite;}
   @keyframes pulse{0%,100%{opacity:.5;}50%{opacity:1;}}
@@ -77,9 +77,11 @@
   <h1>にほん電脳横丁</h1>
   <div class="sub">じゃんけん大会</div>
 
-  <!-- TOP: ID入力 -->
+  <!-- TOP: 合言葉+ID入力 -->
   <div class="panel" id="topPanel">
-    <label>テレグラムID（@以降を入力）</label>
+    <label>合言葉（ルームコード）</label>
+    <input type="text" id="roomInput" placeholder="room-code">
+    <label style="margin-top:12px;">テレグラムID（@以降を入力）</label>
     <input type="text" id="idInput" placeholder="@your_id">
     <button class="btn-primary" id="identifyBtn">すすむ</button>
     <div class="error" id="topError"></div>
@@ -131,6 +133,8 @@
         <button class="hand-btn admin-hand-btn" data-hand="choki">✌️</button>
         <button class="hand-btn admin-hand-btn" data-hand="pa">✋</button>
       </div>
+      <button class="btn-primary" id="setHandBtn" disabled>セットする</button>
+      <div class="msg" id="setHandMsg"></div>
     </div>
 
     <button class="btn-primary" id="revealBtn">公開する</button>
@@ -149,7 +153,10 @@ const show = (id) => $(id).classList.remove('hidden');
 const hide = (id) => $(id).classList.add('hidden');
 
 let myId = null;
+let myRoom = null;
 let pendingId = null;
+let pendingRoom = null;
+let adminRoom = null;
 let parentAuth = null; // { id, pass }
 let myHandSubmitted = false;
 let lastRound = null;
@@ -167,13 +174,24 @@ async function postJson(payload){
 
 /* ---------------- TOP ---------------- */
 $('identifyBtn').addEventListener('click', async () => {
+  const room = $('roomInput').value.trim();
   const raw = $('idInput').value;
+  if (!room) { $('topError').textContent = '合言葉を入力してください'; return; }
   if (!raw) { $('topError').textContent = 'IDを入力してください'; return; }
   $('identifyBtn').disabled = true;
   $('topError').textContent = '';
   try {
-    const data = await postJson({ action: 'identify', telegram_id: normalize(raw) });
-    if (!data.ok) { $('topError').textContent = data.error; $('identifyBtn').disabled = false; return; }
+    const data = await postJson({ action: 'identify', room, telegram_id: normalize(raw) });
+    if (!data.ok) {
+      if (data.full) {
+        alert(data.error);
+        $('topError').textContent = data.error;
+        $('roomInput').disabled = true;
+        $('idInput').disabled = true;
+        return;
+      }
+      $('topError').textContent = data.error; $('identifyBtn').disabled = false; return;
+    }
 
     if (data.role === 'locked') {
       $('topError').textContent = '試行回数超過のため一時的にロックされています。しばらくしてから再度お試しください';
@@ -182,11 +200,13 @@ $('identifyBtn').addEventListener('click', async () => {
     }
     if (data.role === 'admin_pending') {
       pendingId = normalize(raw);
+      pendingRoom = room;
       hide('topPanel'); show('passPanel');
       return;
     }
     // participant
     myId = normalize(raw);
+    myRoom = room;
     hide('topPanel'); show('gamePanel');
     applyGameStatus(data);
     startParticipantPolling();
@@ -209,13 +229,14 @@ $('loginBtn').addEventListener('click', async () => {
   if (!pass) { $('passError').textContent = 'パスワードを入力してください'; return; }
   $('loginBtn').disabled = true;
   try {
-    const data = await postJson({ action: 'login', telegram_id: pendingId, password: pass });
+    const data = await postJson({ action: 'login', room: pendingRoom, telegram_id: pendingId, password: pass });
     if (!data.ok) {
       $('passError').textContent = data.error;
       $('loginBtn').disabled = false;
       return;
     }
     parentAuth = { id: pendingId, pass };
+    adminRoom = pendingRoom;
     hide('passPanel'); show('adminPanel');
     startAdminPolling();
   } catch (err) {
@@ -232,7 +253,7 @@ document.querySelectorAll('#handSection .hand-btn').forEach(btn => {
     document.querySelectorAll('#handSection .hand-btn').forEach(b => b.disabled = true);
     btn.classList.add('selected');
     try {
-      const data = await postJson({ action: 'submitHand', telegram_id: myId, hand });
+      const data = await postJson({ action: 'submitHand', room: myRoom, telegram_id: myId, hand });
       if (!data.ok) {
         $('handError').textContent = data.error;
         document.querySelectorAll('#handSection .hand-btn').forEach(b => b.disabled = false);
@@ -323,7 +344,7 @@ function applyGameStatus(data){
 
 async function pollParticipant(){
   try {
-    const res = await fetch(`${GAS_URL}?action=status&telegram_id=${encodeURIComponent(myId)}`);
+    const res = await fetch(`${GAS_URL}?action=status&room=${encodeURIComponent(myRoom)}&telegram_id=${encodeURIComponent(myId)}`);
     const data = await res.json();
     if (data.ok) applyGameStatus(data);
   } catch (err) { /* 次回ポーリングで再試行 */ }
@@ -338,36 +359,48 @@ function startParticipantPolling(){
 let selectedHand = null;
 
 document.querySelectorAll('.admin-hand-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
+  btn.addEventListener('click', () => {
     document.querySelectorAll('.admin-hand-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     selectedHand = btn.dataset.hand;
-    await postJson({ action: 'setParentHand', parent_id: parentAuth.id, parent_pass: parentAuth.pass, hand: selectedHand });
-    $('adminMsg').textContent = '手を設定しました（参加者には見えません）';
+    $('setHandBtn').disabled = false;
+    $('setHandMsg').textContent = '';
   });
+});
+
+$('setHandBtn').addEventListener('click', async () => {
+  if (!selectedHand) return;
+  $('setHandBtn').disabled = true;
+  await postJson({ action: 'setParentHand', room: adminRoom, parent_id: parentAuth.id, parent_pass: parentAuth.pass, hand: selectedHand });
+  $('setHandMsg').textContent = `${HAND_LABEL[selectedHand]}をセット完了しました（参加者には見えません）`;
+  $('setHandBtn').disabled = false;
 });
 
 $('revealBtn').addEventListener('click', revealHandler);
 
 async function nextRoundHandler(){
-  await postJson({ action: 'nextRound', parent_id: parentAuth.id, parent_pass: parentAuth.pass });
+  await postJson({ action: 'nextRound', room: adminRoom, parent_id: parentAuth.id, parent_pass: parentAuth.pass });
   $('revealBtn').textContent = '公開する';
   $('revealBtn').replaceWith($('revealBtn').cloneNode(true));
   $('revealBtn').addEventListener('click', revealHandler);
   selectedHand = null;
   document.querySelectorAll('.admin-hand-btn').forEach(b => b.classList.remove('selected'));
+  $('setHandBtn').disabled = true;
+  $('setHandMsg').textContent = '';
   pollAdmin();
 }
 
 // 公開ボタンの本処理を関数化し、次ラウンド後に再バインドできるようにする
 async function revealHandler(){
   $('adminError').textContent = ''; $('adminMsg').textContent = '';
-  const data = await postJson({ action: 'reveal', parent_id: parentAuth.id, parent_pass: parentAuth.pass });
+  const data = await postJson({ action: 'reveal', room: adminRoom, parent_id: parentAuth.id, parent_pass: parentAuth.pass });
   if (!data.ok) { $('adminError').textContent = data.error; return; }
   if (data.result === 'redo') {
     $('adminMsg').textContent = '勝者0人のため同ラウンドをやり直します。手を選び直してください。';
     selectedHand = null;
     document.querySelectorAll('.admin-hand-btn').forEach(b => b.classList.remove('selected'));
+    $('setHandBtn').disabled = true;
+    $('setHandMsg').textContent = '';
   } else if (data.result === 'champion') {
     $('adminMsg').textContent = '優勝者が決定しました！';
   } else if (data.result === 'advance') {
@@ -381,12 +414,12 @@ async function revealHandler(){
 
 $('resetBtn').addEventListener('click', async () => {
   if (!confirm('大会をリセットします。よろしいですか？')) return;
-  await postJson({ action: 'resetGame', parent_id: parentAuth.id, parent_pass: parentAuth.pass });
+  await postJson({ action: 'resetGame', room: adminRoom, parent_id: parentAuth.id, parent_pass: parentAuth.pass });
   pollAdmin();
 });
 
 async function pollAdmin(){
-  const res = await fetch(`${GAS_URL}?action=adminStatus&parent_id=${encodeURIComponent(parentAuth.id)}&parent_pass=${encodeURIComponent(parentAuth.pass)}`);
+  const res = await fetch(`${GAS_URL}?action=adminStatus&room=${encodeURIComponent(adminRoom)}&parent_id=${encodeURIComponent(parentAuth.id)}&parent_pass=${encodeURIComponent(parentAuth.pass)}`);
   const data = await res.json();
   if (!data.ok) return;
   $('adminRoundNum').textContent = data.round;
