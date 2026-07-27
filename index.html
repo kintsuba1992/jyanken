@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>にほん電脳横丁 じゃんけん大会</title>
+<style>
+  :root{
+    --bg:#F4EFE6;
+    --panel:#FAF5EC;
+    --panel2:#F0E8DA;
+    --accent:#E88B7D;
+    --accent-dim:#E88B7D33;
+    --danger:#C97B7B;
+    --gold:#D9AA55;
+    --green:#7FB89A;
+    --purple:#9A85B0;
+    --text:#3A3229;
+    --text-dim:#8A7F70;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:var(--bg);
+    color:var(--text);
+    font-family:'Zen Maru Gothic',"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:24px 16px 60px;
+  }
+  h1{font-size:1.15rem; letter-spacing:.08em; color:var(--accent); font-weight:700; margin:6px 0 2px;}
+  .sub{color:var(--text-dim); font-size:.78rem; letter-spacing:.05em; margin-bottom:22px;}
+  .panel{
+    width:100%; max-width:420px; background:var(--panel);
+    border:1px solid #E3D8C6; border-radius:20px; padding:20px;
+    box-shadow:0 4px 14px #00000012; margin-bottom:16px;
+  }
+  label{display:block; font-size:.75rem; color:var(--text-dim); margin-bottom:6px; letter-spacing:.05em;}
+  input[type=text], input[type=password]{
+    width:100%; padding:12px 14px; border-radius:12px; border:1px solid #E3D8C6;
+    background:#FFFDF8; color:var(--text); font-size:1rem; outline:none;
+  }
+  input:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim);}
+  button{cursor:pointer; border:none; border-radius:12px; font-weight:700; letter-spacing:.03em; transition:transform .12s ease, box-shadow .12s ease;}
+  button:active{transform:scale(.96);}
+  .btn-primary{width:100%; margin-top:14px; padding:13px; background:var(--accent); color:#FFFDF8; box-shadow:0 3px 0 #C96F60; font-size:.95rem;}
+  .btn-primary:active{box-shadow:0 1px 0 #C96F60;}
+  .btn-primary:disabled{opacity:.4; box-shadow:none; cursor:not-allowed;}
+  .btn-danger{background:var(--danger); color:#fff; box-shadow:0 3px 0 #A85F5F;}
+  .btn-link{background:none; color:var(--text-dim); font-size:.78rem; margin-top:10px; text-decoration:underline;}
+  .error{color:var(--danger); font-size:.8rem; margin-top:10px; min-height:1em;}
+  .msg{color:var(--gold); font-size:.85rem; min-height:1em; margin-top:6px;}
+  .status-row{display:flex; justify-content:space-between; font-size:.85rem; color:var(--text-dim); margin-bottom:14px;}
+  .status-row b{color:var(--accent); font-size:1rem;}
+  .participants{max-height:150px; overflow-y:auto; font-size:.8rem; color:var(--text-dim); display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
+  .participants.list-mode{display:block;}
+  .participants.list-mode div{padding:4px 0; border-bottom:1px solid #E3D8C688;}
+  .chip{background:var(--panel2); border:1px solid #E3D8C6; border-radius:999px; padding:4px 12px;}
+  .ok-mark{color:var(--gold); font-weight:700;}
+  .hands{display:flex; gap:12px; margin-top:16px;}
+  .hand-btn{flex:1; aspect-ratio:1; background:#FFFDF8; border:2px solid #E3D8C6; border-radius:18px; font-size:2rem; color:var(--text); display:flex; align-items:center; justify-content:center;}
+  .hand-btn.selected{border-color:var(--accent); background:#FBEAE6; animation:pop .3s ease;}
+  .hand-btn:disabled{opacity:.35;}
+  @keyframes pop{0%{transform:scale(1);}50%{transform:scale(1.15);}100%{transform:scale(1);}}
+  .my-hand{text-align:center; font-size:1.05rem; padding:20px 10px; background:var(--panel2); border-radius:14px; margin-top:14px;}
+  .my-hand .icon{font-size:2.4rem; display:block; margin-bottom:8px;}
+  .waiting{text-align:center; color:var(--purple); font-size:.9rem; letter-spacing:.08em; margin-top:12px;}
+  .pulse{animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.5;}50%{opacity:1;}}
+  .result{text-align:center; padding:30px 10px; border-radius:18px; margin-top:10px; font-size:1.3rem; font-weight:700;}
+  .result.win{color:var(--gold); background:#FBF2DE; border:1px solid #EDD9A6;}
+  .result.lose{color:var(--text-dim); background:var(--panel2); border:1px solid #E3D8C6;}
+  .result.champion{color:var(--gold); font-size:1.6rem; background:#FBF2DE; border:1px solid #EDD9A6;}
+  .hidden{display:none;}
+  .confetti{position:fixed; top:-10px; width:8px; height:8px; border-radius:2px; pointer-events:none; animation:fall linear forwards;}
+  @keyframes fall{to{transform:translateY(110vh) rotate(360deg); opacity:.85;}}
+</style>
+</head>
+<body>
+  <h1>にほん電脳横丁</h1>
+  <div class="sub">じゃんけん大会</div>
+
+  <!-- TOP: ID入力 -->
+  <div class="panel" id="topPanel">
+    <label>テレグラムID（@以降を入力）</label>
+    <input type="text" id="idInput" placeholder="@your_id">
+    <button class="btn-primary" id="identifyBtn">すすむ</button>
+    <div class="error" id="topError"></div>
+  </div>
+
+  <!-- PASS: 親のみ -->
+  <div class="panel hidden" id="passPanel">
+    <label>パスワード</label>
+    <input type="password" id="passInput" placeholder="PASSWORD">
+    <button class="btn-primary" id="loginBtn">ログイン</button>
+    <button class="btn-link" id="backToTopBtn">戻る</button>
+    <div class="error" id="passError"></div>
+  </div>
+
+  <!-- 参加者ゲーム画面 -->
+  <div class="panel hidden" id="gamePanel">
+    <div class="status-row">
+      <span>ROUND <b id="roundNum">-</b></span>
+      <span>参加者 <b id="participantCount">-</b> 人</span>
+    </div>
+    <div class="participants" id="participantList"></div>
+
+    <div id="handSection">
+      <label style="margin-top:16px;">あなたの手を選んでください</label>
+      <div class="hands">
+        <button class="hand-btn" data-hand="gu">✊</button>
+        <button class="hand-btn" data-hand="choki">✌️</button>
+        <button class="hand-btn" data-hand="pa">✋</button>
+      </div>
+      <div class="error" id="handError"></div>
+    </div>
+
+    <div class="my-hand hidden" id="myHandBox"></div>
+    <div class="waiting hidden" id="waitingMsg">親の公開をお待ちください…</div>
+    <div class="result hidden" id="resultBox"></div>
+  </div>
+
+  <!-- 親管理画面 -->
+  <div class="panel hidden" id="adminPanel">
+    <div class="status-row"><span>ROUND</span><b id="adminRoundNum">-</b></div>
+    <div class="status-row"><span>提出状況</span><b id="submitCount">-</b></div>
+    <div class="status-row"><span>参加者数</span><b id="adminParticipantCount">-</b></div>
+    <div class="participants list-mode" id="adminParticipantList"></div>
+
+    <div id="adminHandSelect">
+      <div style="font-size:.8rem; color:var(--text-dim);">親の手を選択（非公開）</div>
+      <div class="hands">
+        <button class="hand-btn admin-hand-btn" data-hand="gu">✊</button>
+        <button class="hand-btn admin-hand-btn" data-hand="choki">✌️</button>
+        <button class="hand-btn admin-hand-btn" data-hand="pa">✋</button>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="revealBtn">公開する</button>
+    <button class="btn-primary btn-danger" id="resetBtn" style="margin-top:8px;">大会をリセット</button>
+    <div class="error" id="adminError"></div>
+    <div class="msg" id="adminMsg"></div>
+  </div>
+
+<script>
+const GAS_URL = 'PASTE_YOUR_GAS_WEBAPP_URL_HERE';
+const HAND_LABEL = { gu: 'グー', choki: 'チョキ', pa: 'パー' };
+const HAND_ICON = { gu: '✊', choki: '✌️', pa: '✋' };
+
+const $ = (id) => document.getElementById(id);
+const show = (id) => $(id).classList.remove('hidden');
+const hide = (id) => $(id).classList.add('hidden');
+
+let myId = null;
+let pendingId = null;
+let parentAuth = null; // { id, pass }
+let myHandSubmitted = false;
+let lastRound = null;
+let pollTimer = null;
+
+function normalize(id){
+  id = id.trim();
+  return id.startsWith('@') ? id : '@' + id;
+}
+
+async function postJson(payload){
+  const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+  return res.json();
+}
+
+/* ---------------- TOP ---------------- */
+$('identifyBtn').addEventListener('click', async () => {
+  const raw = $('idInput').value;
+  if (!raw) { $('topError').textContent = 'IDを入力してください'; return; }
+  $('identifyBtn').disabled = true;
+  $('topError').textContent = '';
+  try {
+    const data = await postJson({ action: 'identify', telegram_id: normalize(raw) });
+    if (!data.ok) { $('topError').textContent = data.error; $('identifyBtn').disabled = false; return; }
+
+    if (data.role === 'locked') {
+      $('topError').textContent = '試行回数超過のため一時的にロックされています。しばらくしてから再度お試しください';
+      $('identifyBtn').disabled = false;
+      return;
+    }
+    if (data.role === 'admin_pending') {
+      pendingId = normalize(raw);
+      hide('topPanel'); show('passPanel');
+      return;
+    }
+    // participant
+    myId = normalize(raw);
+    hide('topPanel'); show('gamePanel');
+    applyGameStatus(data);
+    startParticipantPolling();
+  } catch (err) {
+    $('topError').textContent = '通信エラーが発生しました';
+    $('identifyBtn').disabled = false;
+  }
+});
+
+/* ---------------- PASS ---------------- */
+$('backToTopBtn').addEventListener('click', () => {
+  hide('passPanel'); show('topPanel');
+  $('passInput').value = '';
+  $('passError').textContent = '';
+  $('identifyBtn').disabled = false;
+});
+
+$('loginBtn').addEventListener('click', async () => {
+  const pass = $('passInput').value;
+  if (!pass) { $('passError').textContent = 'パスワードを入力してください'; return; }
+  $('loginBtn').disabled = true;
+  try {
+    const data = await postJson({ action: 'login', telegram_id: pendingId, password: pass });
+    if (!data.ok) {
+      $('passError').textContent = data.error;
+      $('loginBtn').disabled = false;
+      return;
+    }
+    parentAuth = { id: pendingId, pass };
+    hide('passPanel'); show('adminPanel');
+    startAdminPolling();
+  } catch (err) {
+    $('passError').textContent = '通信エラーが発生しました';
+    $('loginBtn').disabled = false;
+  }
+});
+
+/* ---------------- 参加者ゲーム画面 ---------------- */
+document.querySelectorAll('#handSection .hand-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (myHandSubmitted) return;
+    const hand = btn.dataset.hand;
+    document.querySelectorAll('#handSection .hand-btn').forEach(b => b.disabled = true);
+    btn.classList.add('selected');
+    try {
+      const data = await postJson({ action: 'submitHand', telegram_id: myId, hand });
+      if (!data.ok) {
+        $('handError').textContent = data.error;
+        document.querySelectorAll('#handSection .hand-btn').forEach(b => b.disabled = false);
+        btn.classList.remove('selected');
+        return;
+      }
+      myHandSubmitted = true;
+      hide('handSection');
+      showMyHand(hand);
+      show('waitingMsg');
+      $('waitingMsg').classList.add('pulse');
+    } catch (err) {
+      $('handError').textContent = '通信エラーが発生しました';
+      document.querySelectorAll('#handSection .hand-btn').forEach(b => b.disabled = false);
+    }
+  });
+});
+
+function showMyHand(hand){
+  const box = $('myHandBox');
+  box.innerHTML = `<span class="icon">${HAND_ICON[hand]}</span>あなたが選んだ手は「${HAND_LABEL[hand]}」です`;
+  show('myHandBox');
+}
+
+function renderParticipants(elId, list, mode){
+  const el = $(elId);
+  if (mode === 'chip') {
+    el.innerHTML = list.map(p => `<span class="chip">${p}</span>`).join('');
+  } else {
+    el.innerHTML = list.map(p => `<div>${p}</div>`).join('');
+  }
+}
+
+function showResult(kind, text){
+  hide('handSection'); hide('waitingMsg'); hide('myHandBox');
+  const box = $('resultBox');
+  box.classList.remove('hidden', 'win', 'lose', 'champion');
+  box.classList.add(kind);
+  box.textContent = text;
+  if (kind === 'win' || kind === 'champion') fireConfetti();
+}
+
+function fireConfetti(){
+  const colors = ['#E88B7D', '#D9AA55', '#7FB89A', '#9A85B0'];
+  for (let i = 0; i < 40; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti';
+    el.style.left = Math.random() * 100 + 'vw';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.animationDuration = (2 + Math.random() * 1.5) + 's';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3600);
+  }
+}
+
+function applyGameStatus(data){
+  $('roundNum').textContent = data.round;
+  $('participantCount').textContent = data.participantCount;
+  renderParticipants('participantList', data.participants, 'chip');
+
+  if (data.champion) {
+    showResult('champion', `🏆 優勝: ${data.champion}`);
+    clearInterval(pollTimer);
+    return;
+  }
+  if (data.status === 'REVEALED') {
+    if (data.myResult === 'win') showResult('win', '勝ち抜け！次ラウンドをお待ちください');
+    else if (data.myResult === 'lose') { showResult('lose', '敗退しました'); clearInterval(pollTimer); }
+    return;
+  }
+  if (lastRound !== null && data.round !== lastRound) {
+    myHandSubmitted = false;
+    document.querySelectorAll('#handSection .hand-btn').forEach(b => { b.disabled = false; b.classList.remove('selected'); });
+    hide('resultBox'); hide('waitingMsg'); hide('myHandBox');
+    show('handSection');
+    $('handError').textContent = '';
+  }
+  lastRound = data.round;
+
+  if (data.myHandSubmitted && !myHandSubmitted) {
+    myHandSubmitted = true;
+    hide('handSection');
+    showMyHand(data.myHand);
+    show('waitingMsg');
+    $('waitingMsg').classList.add('pulse');
+  }
+}
+
+async function pollParticipant(){
+  try {
+    const res = await fetch(`${GAS_URL}?action=status&telegram_id=${encodeURIComponent(myId)}`);
+    const data = await res.json();
+    if (data.ok) applyGameStatus(data);
+  } catch (err) { /* 次回ポーリングで再試行 */ }
+}
+
+function startParticipantPolling(){
+  pollParticipant();
+  pollTimer = setInterval(pollParticipant, 3000);
+}
+
+/* ---------------- 親管理画面 ---------------- */
+let selectedHand = null;
+
+document.querySelectorAll('.admin-hand-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    document.querySelectorAll('.admin-hand-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedHand = btn.dataset.hand;
+    await postJson({ action: 'setParentHand', parent_id: parentAuth.id, parent_pass: parentAuth.pass, hand: selectedHand });
+    $('adminMsg').textContent = '手を設定しました（参加者には見えません）';
+  });
+});
+
+$('revealBtn').addEventListener('click', revealHandler);
+
+async function nextRoundHandler(){
+  await postJson({ action: 'nextRound', parent_id: parentAuth.id, parent_pass: parentAuth.pass });
+  $('revealBtn').textContent = '公開する';
+  $('revealBtn').replaceWith($('revealBtn').cloneNode(true));
+  $('revealBtn').addEventListener('click', revealHandler);
+  selectedHand = null;
+  document.querySelectorAll('.admin-hand-btn').forEach(b => b.classList.remove('selected'));
+  pollAdmin();
+}
+
+// 公開ボタンの本処理を関数化し、次ラウンド後に再バインドできるようにする
+async function revealHandler(){
+  $('adminError').textContent = ''; $('adminMsg').textContent = '';
+  const data = await postJson({ action: 'reveal', parent_id: parentAuth.id, parent_pass: parentAuth.pass });
+  if (!data.ok) { $('adminError').textContent = data.error; return; }
+  if (data.result === 'redo') {
+    $('adminMsg').textContent = '勝者0人のため同ラウンドをやり直します。手を選び直してください。';
+    selectedHand = null;
+    document.querySelectorAll('.admin-hand-btn').forEach(b => b.classList.remove('selected'));
+  } else if (data.result === 'champion') {
+    $('adminMsg').textContent = '優勝者が決定しました！';
+  } else if (data.result === 'advance') {
+    $('adminMsg').textContent = `${data.winnerCount}人が勝ち抜けました。次ラウンドへ進めます。`;
+    $('revealBtn').textContent = '次ラウンドへ進む';
+    $('revealBtn').replaceWith($('revealBtn').cloneNode(true));
+    $('revealBtn').addEventListener('click', nextRoundHandler, { once: true });
+  }
+  pollAdmin();
+}
+
+$('resetBtn').addEventListener('click', async () => {
+  if (!confirm('大会をリセットします。よろしいですか？')) return;
+  await postJson({ action: 'resetGame', parent_id: parentAuth.id, parent_pass: parentAuth.pass });
+  pollAdmin();
+});
+
+async function pollAdmin(){
+  const res = await fetch(`${GAS_URL}?action=adminStatus&parent_id=${encodeURIComponent(parentAuth.id)}&parent_pass=${encodeURIComponent(parentAuth.pass)}`);
+  const data = await res.json();
+  if (!data.ok) return;
+  $('adminRoundNum').textContent = data.round;
+  $('submitCount').textContent = `${data.submittedCount} / ${data.participantCount}`;
+  $('adminParticipantCount').textContent = data.participantCount;
+  renderParticipants('adminParticipantList', data.participants, 'list');
+}
+
+let adminPollTimer = null;
+function startAdminPolling(){
+  pollAdmin();
+  adminPollTimer = setInterval(pollAdmin, 3000);
+}
+</script>
+</body>
+</html>
