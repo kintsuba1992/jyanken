@@ -136,6 +136,7 @@
         <span>参加者 <b id="participantCount">-</b></span>
       </div>
       <div class="seat-note">参加枠がすべて埋まったら公開されます</div>
+      <div class="my-hand hidden" id="parentHandBox"></div>
       <div class="seat-grid" id="seatGrid"></div>
       <div class="my-hand hidden" id="myHandBox"></div>
       <div class="waiting hidden" id="waitingMsg">親の公開をお待ちください…</div>
@@ -149,6 +150,7 @@
     <div class="status-row"><span>提出状況</span><b id="submitCount">-</b></div>
     <div class="status-row"><span>参加者数</span><b id="adminParticipantCount">-</b></div>
     <div class="participants list-mode hidden" id="adminParticipantList"></div>
+    <div class="my-hand hidden" id="adminParentHandBox"></div>
     <div class="seat-grid" id="adminSeatGrid"></div>
 
     <div id="adminHandSelect">
@@ -344,14 +346,29 @@ function formatParticipantCount(count, max){
   return `${count}人（無制限）`;
 }
 
+function renderParentHand(elId, parentHand){
+  const box = $(elId);
+  if (parentHand) {
+    box.innerHTML = `<span class="icon">${HAND_ICON[parentHand]}</span>親の手は「${HAND_LABEL[parentHand]}」でした`;
+    show(elId);
+  } else {
+    hide(elId);
+  }
+}
+
 function applyGameStatus(data){
   $('roundNum').textContent = data.round;
   $('participantCount').textContent = formatParticipantCount(data.participantCount, data.maxParticipants);
   renderSeatGrid('seatGrid', data.seats || []);
+  renderParentHand('parentHandBox', data.parentHand);
 
   if (data.champion) {
     show('seatSection'); hide('handSection');
-    showResult('champion', `🏆 優勝: ${data.champion}`);
+    if (data.myEliminated) {
+      showResult('lose', `優勝者は ${data.champion} です（あなたは敗退しました）`);
+    } else {
+      showResult('champion', `🏆 優勝: ${data.champion}`);
+    }
     clearInterval(pollTimer);
     return;
   }
@@ -359,6 +376,11 @@ function applyGameStatus(data){
     show('seatSection'); hide('handSection');
     if (data.myResult === 'win') showResult('win', '勝ち抜け！次ラウンドをお待ちください');
     else if (data.myResult === 'lose') { showResult('lose', '敗退しました'); clearInterval(pollTimer); }
+    return;
+  }
+  if (data.myEliminated) {
+    show('seatSection'); hide('handSection');
+    showResult('lose', 'あなたは敗退しました');
     return;
   }
   if (lastRound !== null && data.round !== lastRound) {
@@ -463,6 +485,7 @@ async function pollAdmin(){
   $('submitCount').textContent = `${data.submittedCount} / ${data.participantCount}`;
   $('adminParticipantCount').textContent = formatParticipantCount(data.participantCount, data.maxParticipants);
   renderSeatGrid('adminSeatGrid', data.seats || []);
+  renderParentHand('adminParentHandBox', data.parentHand);
 }
 
 let adminPollTimer = null;
