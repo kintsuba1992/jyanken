@@ -132,7 +132,7 @@
     <div id="seatSection" class="hidden">
       <div class="status-row">
         <span>ROUND <b id="roundNum">-</b></span>
-        <span>参加者 <b id="participantCount">-</b> 人</span>
+        <span>参加者 <b id="participantCount">-</b></span>
       </div>
       <div class="seat-note">参加枠がすべて埋まったら公開されます</div>
       <div class="seat-grid" id="seatGrid"></div>
@@ -335,9 +335,14 @@ function fireConfetti(){
   }
 }
 
+function formatParticipantCount(count, max){
+  if (max > 0) return `${count} / ${max} 人`;
+  return `${count}人（無制限）`;
+}
+
 function applyGameStatus(data){
   $('roundNum').textContent = data.round;
-  $('participantCount').textContent = data.participantCount;
+  $('participantCount').textContent = formatParticipantCount(data.participantCount, data.maxParticipants);
   renderSeatGrid('seatGrid', data.seats || []);
 
   if (data.champion) {
@@ -452,7 +457,7 @@ async function pollAdmin(){
   if (!data.ok) return;
   $('adminRoundNum').textContent = data.round;
   $('submitCount').textContent = `${data.submittedCount} / ${data.participantCount}`;
-  $('adminParticipantCount').textContent = data.participantCount;
+  $('adminParticipantCount').textContent = formatParticipantCount(data.participantCount, data.maxParticipants);
   renderSeatGrid('adminSeatGrid', data.seats || []);
 }
 
