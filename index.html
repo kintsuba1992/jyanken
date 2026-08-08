@@ -59,6 +59,21 @@
   .participants.list-mode{display:block;}
   .participants.list-mode div{padding:4px 0; border-bottom:1px solid #E3D8C688;}
   .chip{background:var(--panel2); border:1px solid #E3D8C6; border-radius:999px; padding:4px 12px;}
+  .seat-note{
+    background:var(--panel2); border:1px solid #E3D8C6; border-radius:12px; color:var(--text-dim);
+    font-size:.78rem; padding:8px 12px; text-align:center; margin-bottom:12px;
+  }
+  .seat-grid{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(88px, 1fr)); gap:8px; margin-bottom:14px;
+  }
+  .seat{
+    background:#FFFDF8; border:1px solid #E3D8C6; border-radius:12px; padding:8px 6px; text-align:center;
+  }
+  .seat .seat-id{font-size:.68rem; color:var(--text-dim); word-break:break-all; margin-bottom:4px;}
+  .seat .seat-hand{font-size:1rem; font-weight:700; color:var(--text-dim);}
+  .seat.win{background:#FBF2DE; border-color:#EDD9A6;}
+  .seat.win .seat-id, .seat.win .seat-hand{color:var(--gold);}
+  .seat.lose{opacity:.5;}
   .ok-mark{color:var(--gold); font-weight:700;}
   .hands{display:flex; gap:12px; margin-top:16px;}
   .hand-btn{flex:1; aspect-ratio:1; background:#FFFDF8; border:2px solid #E3D8C6; border-radius:18px; font-size:4rem; color:var(--text); display:flex; align-items:center; justify-content:center;}
@@ -104,14 +119,8 @@
 
   <!-- 参加者ゲーム画面 -->
   <div class="panel hidden" id="gamePanel">
-    <div class="status-row">
-      <span>ROUND <b id="roundNum">-</b></span>
-      <span>参加者 <b id="participantCount">-</b> 人</span>
-    </div>
-    <div class="participants" id="participantList"></div>
-
     <div id="handSection">
-      <label style="margin-top:16px;">あなたの手を選んでください</label>
+      <label>あなたの手を選んでください</label>
       <div class="hands">
         <button class="hand-btn" data-hand="gu">✊</button>
         <button class="hand-btn" data-hand="choki">✌️</button>
@@ -120,9 +129,17 @@
       <div class="error" id="handError"></div>
     </div>
 
-    <div class="my-hand hidden" id="myHandBox"></div>
-    <div class="waiting hidden" id="waitingMsg">親の公開をお待ちください…</div>
-    <div class="result hidden" id="resultBox"></div>
+    <div id="seatSection" class="hidden">
+      <div class="status-row">
+        <span>ROUND <b id="roundNum">-</b></span>
+        <span>参加者 <b id="participantCount">-</b> 人</span>
+      </div>
+      <div class="seat-note">参加枠がすべて埋まったら公開されます</div>
+      <div class="seat-grid" id="seatGrid"></div>
+      <div class="my-hand hidden" id="myHandBox"></div>
+      <div class="waiting hidden" id="waitingMsg">親の公開をお待ちください…</div>
+      <div class="result hidden" id="resultBox"></div>
+    </div>
   </div>
 
   <!-- 親管理画面 -->
@@ -130,7 +147,8 @@
     <div class="status-row"><span>ROUND</span><b id="adminRoundNum">-</b></div>
     <div class="status-row"><span>提出状況</span><b id="submitCount">-</b></div>
     <div class="status-row"><span>参加者数</span><b id="adminParticipantCount">-</b></div>
-    <div class="participants list-mode" id="adminParticipantList"></div>
+    <div class="participants list-mode hidden" id="adminParticipantList"></div>
+    <div class="seat-grid" id="adminSeatGrid"></div>
 
     <div id="adminHandSelect">
       <div style="font-size:.8rem; color:var(--text-dim);">親の手を選択（非公開）</div>
@@ -268,6 +286,7 @@ document.querySelectorAll('#handSection .hand-btn').forEach(btn => {
       }
       myHandSubmitted = true;
       hide('handSection');
+      show('seatSection');
       showMyHand(hand);
       show('waitingMsg');
       $('waitingMsg').classList.add('pulse');
@@ -284,17 +303,18 @@ function showMyHand(hand){
   show('myHandBox');
 }
 
-function renderParticipants(elId, list, mode){
+function renderSeatGrid(elId, seats){
   const el = $(elId);
-  if (mode === 'chip') {
-    el.innerHTML = list.map(p => `<span class="chip">${p}</span>`).join('');
-  } else {
-    el.innerHTML = list.map(p => `<div>${p}</div>`).join('');
-  }
+  el.innerHTML = seats.map(s => {
+    let cls = 'seat';
+    let handText = s.submitted ? '？' : '‐';
+    if (s.hand) { handText = HAND_LABEL[s.hand]; cls += s.active ? ' win' : ' lose'; }
+    return `<div class="${cls}"><div class="seat-id">${s.id}</div><div class="seat-hand">${handText}</div></div>`;
+  }).join('');
 }
 
 function showResult(kind, text){
-  hide('handSection'); hide('waitingMsg'); hide('myHandBox');
+  hide('waitingMsg'); hide('myHandBox');
   const box = $('resultBox');
   box.classList.remove('hidden', 'win', 'lose', 'champion');
   box.classList.add(kind);
@@ -318,14 +338,16 @@ function fireConfetti(){
 function applyGameStatus(data){
   $('roundNum').textContent = data.round;
   $('participantCount').textContent = data.participantCount;
-  renderParticipants('participantList', data.participants, 'chip');
+  renderSeatGrid('seatGrid', data.seats || []);
 
   if (data.champion) {
+    show('seatSection'); hide('handSection');
     showResult('champion', `🏆 優勝: ${data.champion}`);
     clearInterval(pollTimer);
     return;
   }
   if (data.status === 'REVEALED') {
+    show('seatSection'); hide('handSection');
     if (data.myResult === 'win') showResult('win', '勝ち抜け！次ラウンドをお待ちください');
     else if (data.myResult === 'lose') { showResult('lose', '敗退しました'); clearInterval(pollTimer); }
     return;
@@ -334,14 +356,14 @@ function applyGameStatus(data){
     myHandSubmitted = false;
     document.querySelectorAll('#handSection .hand-btn').forEach(b => { b.disabled = false; b.classList.remove('selected'); });
     hide('resultBox'); hide('waitingMsg'); hide('myHandBox');
-    show('handSection');
+    hide('seatSection'); show('handSection');
     $('handError').textContent = '';
   }
   lastRound = data.round;
 
   if (data.myHandSubmitted && !myHandSubmitted) {
     myHandSubmitted = true;
-    hide('handSection');
+    hide('handSection'); show('seatSection');
     showMyHand(data.myHand);
     show('waitingMsg');
     $('waitingMsg').classList.add('pulse');
@@ -431,7 +453,7 @@ async function pollAdmin(){
   $('adminRoundNum').textContent = data.round;
   $('submitCount').textContent = `${data.submittedCount} / ${data.participantCount}`;
   $('adminParticipantCount').textContent = data.participantCount;
-  renderParticipants('adminParticipantList', data.participants, 'list');
+  renderSeatGrid('adminSeatGrid', data.seats || []);
 }
 
 let adminPollTimer = null;
