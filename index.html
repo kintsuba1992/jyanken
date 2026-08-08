@@ -74,6 +74,7 @@
   .seat.win{background:#FBF2DE; border-color:#EDD9A6;}
   .seat.win .seat-id, .seat.win .seat-hand{color:var(--gold);}
   .seat.lose{opacity:.5;}
+  .seat.empty{border-style:dashed; opacity:.5;}
   .ok-mark{color:var(--gold); font-weight:700;}
   .hands{display:flex; gap:12px; margin-top:16px;}
   .hand-btn{flex:1; aspect-ratio:1; background:#FFFDF8; border:2px solid #E3D8C6; border-radius:18px; font-size:4rem; color:var(--text); display:flex; align-items:center; justify-content:center;}
@@ -306,6 +307,9 @@ function showMyHand(hand){
 function renderSeatGrid(elId, seats){
   const el = $(elId);
   el.innerHTML = seats.map(s => {
+    if (s.empty) {
+      return `<div class="seat empty"><div class="seat-id">空席</div><div class="seat-hand">‐</div></div>`;
+    }
     let cls = 'seat';
     let handText = s.submitted ? '？' : '‐';
     if (s.hand) { handText = HAND_LABEL[s.hand]; cls += s.active ? ' win' : ' lose'; }
